@@ -123,12 +123,15 @@
     },
     "feishu": {
       "enabled": true,
-      "connectionMode": "websocket",
       "dmPolicy": "pairing",
-      "groupPolicy": "allowlist",
-      "requireMention": true,
-      "appId": "your-app-id",
-      "appSecret": "your-app-secret"
+      "groupPolicy": "open",
+      "accounts": {
+        "main": {
+          "appId": "your-app-id",
+          "appSecret": "your-app-secret",
+          "botName": "OpenClaw Bot"
+        }
+      }
     },
     "dingtalk": {
       "enabled": true,
@@ -186,7 +189,7 @@
     "installs": {
       "feishu": {
         "source": "npm",
-        "spec": "@m1heng-clawd/feishu",
+        "spec": "@openclaw/feishu",
         "installPath": "/home/node/.openclaw/extensions/feishu",
         "installedAt": "2026-01-31T05:53:18.535Z"
       },

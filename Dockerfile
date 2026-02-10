@@ -27,7 +27,7 @@ RUN apt-get update \
 RUN npm install -g npm@latest
 
 # 安装 OpenClaw 和 OpenCode AI
-RUN npm install -g openclaw@2026.2.6-3 opencode-ai@latest
+RUN npm install -g openclaw@2026.2.9 opencode-ai@latest
 
 # 安装 Playwright 和 Chromium
 RUN npm install -g playwright && npx playwright install chromium --with-deps
@@ -45,8 +45,8 @@ RUN mkdir -p /home/node/.openclaw/workspace && \
 # 切换到 node 用户安装插件
 USER node
 
-# 安装飞书插件 - 使用 timeout 防止卡住，忽略错误继续构建
-RUN timeout 300 openclaw plugins install @m1heng-clawd/feishu || true
+# OpenClaw已内置飞书插件 - 使用 timeout 防止卡住，忽略错误继续构建
+# RUN timeout 300 openclaw plugins install @m1heng-clawd/feishu || true
 
 # 安装钉钉插件 - 使用 timeout 防止卡住，忽略错误继续构建
 RUN timeout 300 openclaw plugins install https://github.com/soimy/clawdbot-channel-dingtalk.git || true
@@ -72,7 +72,8 @@ RUN chmod +x /usr/local/bin/init.sh
 
 # 设置基础环境变量
 ENV HOME=/home/node \
-    TERM=xterm-256color
+    TERM=xterm-256color \
+    NODE_PATH=/usr/local/lib/node_modules
 
 # 暴露端口
 EXPOSE 18789 18790
