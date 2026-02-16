@@ -58,7 +58,8 @@ USER node
 # RUN timeout 300 openclaw plugins install @m1heng-clawd/feishu || true
 
 # 安装钉钉插件 - 使用 timeout 防止卡住，忽略错误继续构建
-RUN cd /tmp && \
+RUN mkdir -p /home/node/.openclaw/extensions && \
+    cd /home/node/.openclaw/extensions && \
     git clone https://github.com/soimy/openclaw-channel-dingtalk.git && \
     cd openclaw-channel-dingtalk && \
     npm install && \
