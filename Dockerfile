@@ -36,7 +36,7 @@ ENV PATH="$BUN_INSTALL/bin:$PATH"
 RUN bun install -g https://github.com/tobi/qmd
 
 # 安装 OpenClaw 和 OpenCode AI
-RUN npm install -g openclaw@2026.2.14 opencode-ai@latest
+RUN npm install -g openclaw@2026.2.15 opencode-ai@latest
 
 # 安装 Playwright 和 Chromium
 RUN npm install -g playwright && npx playwright install chromium --with-deps
@@ -58,7 +58,7 @@ USER node
 # RUN timeout 300 openclaw plugins install @m1heng-clawd/feishu || true
 
 # 安装钉钉插件 - 使用 timeout 防止卡住，忽略错误继续构建
-RUN timeout 300 openclaw plugins install https://github.com/soimy/clawdbot-channel-dingtalk.git || true
+RUN timeout 300 openclaw plugins install https://github.com/soimy/openclaw-channel-dingtalk.git || true
 
 # 安装 QQ 机器人插件 - 使用 timeout 防止卡住，忽略错误继续构建
 RUN cd /tmp && \
