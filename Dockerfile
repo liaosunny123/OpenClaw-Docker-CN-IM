@@ -4,9 +4,14 @@ FROM node:22-slim
 # 设置工作目录
 WORKDIR /app
 
-# 安装必要的系统依赖
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends \
+# 设置环境变量
+ENV BUN_INSTALL="/usr/local" \
+    PATH="/usr/local/bin:$PATH" \
+    DEBIAN_FRONTEND=noninteractive
+
+# 1. 合并系统依赖安装与全局工具安装，并清理缓存
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
     bash \
     ca-certificates \
     chromium \
@@ -21,73 +26,50 @@ RUN apt-get update \
     socat \
     tini \
     unzip \
-    websockify \
-  && rm -rf /var/lib/apt/lists/*
+    websockify && \
+    # 更新 npm 并安装全局包
+    npm install -g npm@latest && \
+    npm install -g openclaw@2026.2.25 opencode-ai@latest playwright playwright-extra puppeteer-extra-plugin-stealth @steipete/bird && \
+    # 安装 bun 和 qmd
+    curl -fsSL https://bun.sh/install | BUN_INSTALL=/usr/local bash && \
+    /usr/local/bin/bun install -g @tobilu/qmd && \
+    # 安装 Playwright 浏览器依赖
+    npx playwright install chromium --with-deps && \
+    # 清理 apt 缓存
+    apt-get purge -y --auto-remove && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/* /tmp/* /root/.npm /root/.cache
 
-# 更新 npm 到最新版本
-RUN npm install -g npm@latest
-
-# 安装 bun
-RUN curl -fsSL https://bun.sh/install | BUN_INSTALL=/usr/local bash
-ENV BUN_INSTALL="/usr/local"
-ENV PATH="$BUN_INSTALL/bin:$PATH"
-
-# 安装 qmd
-RUN bun install -g https://github.com/tobi/qmd
-
-# 安装 OpenClaw 和 OpenCode AI
-RUN npm install -g openclaw@2026.2.24 opencode-ai@latest
-
-# 安装 Playwright 和 Chromium
-RUN npm install -g playwright && npx playwright install chromium --with-deps
-
-# 安装 playwright-extra 和 puppeteer-extra-plugin-stealth
-RUN npm install -g playwright-extra puppeteer-extra-plugin-stealth
-
-# 安装 bird
-RUN npm install -g @steipete/bird
-
-# 创建配置目录并设置权限
-RUN mkdir -p /home/node/.openclaw/workspace && \
+# 2. 插件安装（作为 node 用户以避免后期权限修复带来的镜像膨胀）
+RUN mkdir -p /home/node/.openclaw/workspace /home/node/.openclaw/extensions && \
     chown -R node:node /home/node
 
-# 切换到 node 用户安装插件
 USER node
+ENV HOME=/home/node
+WORKDIR /home/node
 
-# OpenClaw已内置飞书插件 - 使用 timeout 防止卡住，忽略错误继续构建
-# RUN timeout 300 openclaw plugins install @m1heng-clawd/feishu || true
-
-# 安装钉钉插件 - 使用 timeout 防止卡住，忽略错误继续构建
-RUN mkdir -p /home/node/.openclaw/extensions && \
-    cd /home/node/.openclaw/extensions && \
-    git clone https://github.com/soimy/openclaw-channel-dingtalk.git && \
-    cd openclaw-channel-dingtalk && \
-    npm install && \
-    timeout 300 openclaw plugins install -l . || true
-
-# 安装 QQ 机器人插件 - 使用 timeout 防止卡住，忽略错误继续构建
-RUN cd /tmp && \
-    git clone https://github.com/justlovemaki/qqbot.git && \
+RUN cd /home/node/.openclaw/extensions && \
+    git clone --depth 1 https://github.com/soimy/openclaw-channel-dingtalk.git dingtalk && \
+    cd dingtalk && \
+    npm install --production && \
+    timeout 300 openclaw plugins install -l . || true && \
+    cd /home/node/.openclaw && \
+    git clone --depth 1 https://github.com/justlovemaki/qqbot.git && \
     cd qqbot && \
-    timeout 300 openclaw plugins install . || true
+    timeout 300 openclaw plugins install . || true && \
+    timeout 300 openclaw plugins install @sunnoy/wecom || true && \
+    find /home/node/.openclaw/extensions -name ".git" -type d -exec rm -rf {} + && \
+    rm -rf /home/node/.openclaw/qqbot/.git && \
+    rm -rf /tmp/* /home/node/.npm /home/node/.cache
 
-# 安装企业微信插件 - 使用 timeout 防止卡住，忽略错误继续构建
-RUN timeout 300 openclaw plugins install @sunnoy/wecom || true
-
-# 切换回 root 用户继续后续操作
+# 3. 最终配置
 USER root
-
-# 如果存在，删除飞书插件目录（OpenClaw 已内置）
-RUN rm -rf /home/node/.openclaw/extensions/feishu
-
-# 确保 extensions 目录权限正确（排除 node_modules 以加快构建速度）
-RUN if [ -d /home/node/.openclaw/extensions ]; then find /home/node/.openclaw/extensions -type d -name node_modules -prune -o -exec chown node:node {} +; fi
 
 # 复制初始化脚本
 COPY ./init.sh /usr/local/bin/init.sh
 RUN chmod +x /usr/local/bin/init.sh
 
-# 设置基础环境变量
+# 设置环境变量
 ENV HOME=/home/node \
     TERM=xterm-256color \
     NODE_PATH=/usr/local/lib/node_modules
@@ -98,5 +80,5 @@ EXPOSE 18789 18790
 # 设置工作目录为 home
 WORKDIR /home/node
 
-# 使用初始化脚本作为入口点（以 root 运行以便修复权限）
+# 使用初始化脚本作为入口点
 ENTRYPOINT ["/bin/bash", "/usr/local/bin/init.sh"]

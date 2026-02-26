@@ -141,6 +141,7 @@
       "corpId": "dingxxxxxx",
       "agentId": "123456789",
       "dmPolicy": "open",
+      "allowFrom": ["*"],
       "groupPolicy": "open",
       "messageType": "markdown",
       "debug": false
@@ -150,7 +151,7 @@
       "appId": "your-qqbot-app-id",
       "clientSecret": "your-qqbot-client-secret"
     },
-    "wxwork": {
+    "wecom": {
       "enabled": true,
       "token": "your-token",
       "encodingAesKey": "your-aes-key"
@@ -161,7 +162,11 @@
     "mode": "local",
     "bind": "lan",
     "controlUi": {
-      "allowInsecureAuth": true
+      "allowInsecureAuth": true,
+      "dangerouslyDisableDeviceAuth": false,
+      "allowedOrigins": [
+        "http://localhost"
+      ]
     },
     "auth": {
       "mode": "token",
@@ -179,7 +184,7 @@
       "dingtalk": {
         "enabled": true
       },
-      "openclaw-plugin-wecom": {
+      "wecom": {
         "enabled": true
       },
       "qqbot": {
@@ -199,10 +204,10 @@
         "installPath": "/home/node/.openclaw/extensions/dingtalk",
         "installedAt": "2026-02-01T04:23:35.823Z"
       },
-      "openclaw-plugin-wecom": {
+      "wecom": {
         "source": "npm",
-        "spec": "https://github.com/sunnoy/openclaw-plugin-wecom.git",
-        "installPath": "/home/node/.openclaw/extensions/openclaw-plugin-wecom",
+        "spec": "@sunnoy/wecom",
+        "installPath": "/home/node/.openclaw/extensions/wecom",
         "installedAt": "2026-02-01T05:18:35.770Z"
       },
       "qqbot": {
@@ -211,6 +216,19 @@
         "installPath": "/home/node/.openclaw/extensions/qqbot",
         "installedAt": "2026-02-01T06:50:54.140Z"
       }
+    }
+  },
+  "memory": {
+    "backend": "qmd",
+    "qmd": {
+      "command": "/usr/local/bin/qmd",
+      "paths": [
+        {
+          "path": "/home/node/.openclaw/workspace",
+          "name": "workspace",
+          "pattern": "**/*.md"
+        }
+      ]
     }
   }
 }

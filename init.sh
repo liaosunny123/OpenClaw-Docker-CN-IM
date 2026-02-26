@@ -149,9 +149,13 @@ def sync():
 
         # --- 2. 渠道与插件同步 (声明式) ---
         channels = ensure_path(config, ['channels'])
-        entries = ensure_path(config, ['plugins', 'entries'])
-        installs = ensure_path(config, ['plugins', 'installs'])
+        plugins = ensure_path(config, ['plugins'])
+        entries = ensure_path(plugins, ['entries'])
+        installs = ensure_path(plugins, ['installs'])
 
+        if env.get('OPENCLAW_PLUGINS_ENABLED'):
+            plugins['enabled'] = env['OPENCLAW_PLUGINS_ENABLED'].lower() == 'true'
+        
         def sync_feishu(c, e):
             c.update({'enabled': True, 'dmPolicy': 'pairing', 'groupPolicy': 'open'})
             main = ensure_path(c, ['accounts', 'main'])
@@ -167,7 +171,8 @@ def sync():
                 'enabled': True, 'clientId': e['DINGTALK_CLIENT_ID'], 
                 'clientSecret': e['DINGTALK_CLIENT_SECRET'],
                 'robotCode': e.get('DINGTALK_ROBOT_CODE') or e['DINGTALK_CLIENT_ID'],
-                'dmPolicy': 'open', 'groupPolicy': 'open', 'messageType': 'markdown'
+                'dmPolicy': 'open', 'groupPolicy': 'open', 'messageType': 'markdown',
+                'allowFrom': ['*']
             })
             if e.get('DINGTALK_CORP_ID'): c['corpId'] = e['DINGTALK_CORP_ID']
             if e.get('DINGTALK_AGENT_ID'): c['agentId'] = e['DINGTALK_AGENT_ID']
@@ -208,13 +213,28 @@ def sync():
                     entries[cid]['enabled'] = False
                     print(f'🚫 环境变量缺失，已禁用渠道: {cid}')
 
+        # 汇总所有已启用的插件到 allow 列表
+        plugins['allow'] = [k for k, v in entries.items() if v.get('enabled')]
+        print('📦 已配置插件集合: ' + ', '.join(plugins['allow']))
+
         # --- 3. Gateway 同步 ---
         if env.get('OPENCLAW_GATEWAY_TOKEN'):
             gw = ensure_path(config, ['gateway'])
             gw['port'] = int(env.get('OPENCLAW_GATEWAY_PORT') or 18789)
             gw['bind'] = env.get('OPENCLAW_GATEWAY_BIND') or '0.0.0.0'
-            gw['mode'] = 'local'
-            ensure_path(gw, ['auth'])['token'] = env['OPENCLAW_GATEWAY_TOKEN']
+            gw['mode'] = env.get('OPENCLAW_GATEWAY_MODE') or 'local'
+            
+            # --- Control UI 配置 ---
+            cui = ensure_path(gw, ['controlUi'])
+            cui['allowInsecureAuth'] = env.get('OPENCLAW_GATEWAY_ALLOW_INSECURE_AUTH', 'true').lower() == 'true'
+            cui['dangerouslyDisableDeviceAuth'] = env.get('OPENCLAW_GATEWAY_DANGEROUSLY_DISABLE_DEVICE_AUTH', 'false').lower() == 'true'
+            if env.get('OPENCLAW_GATEWAY_ALLOWED_ORIGINS'):
+                cui['allowedOrigins'] = [x.strip() for x in env['OPENCLAW_GATEWAY_ALLOWED_ORIGINS'].split(',') if x.strip()]
+            
+            auth = ensure_path(gw, ['auth'])
+            auth['token'] = env['OPENCLAW_GATEWAY_TOKEN']
+            auth['mode'] = env.get('OPENCLAW_GATEWAY_AUTH_MODE') or 'token'
+
             print('✅ Gateway 同步完成')
 
         # 保存并更新时间戳
@@ -245,6 +265,12 @@ echo "上下文窗口: ${CONTEXT_WINDOW:-200000}"
 echo "最大 Tokens: ${MAX_TOKENS:-8192}"
 echo "Gateway 端口: $OPENCLAW_GATEWAY_PORT"
 echo "Gateway 绑定: $OPENCLAW_GATEWAY_BIND"
+echo "Gateway 模式: ${OPENCLAW_GATEWAY_MODE:-local}"
+echo "Gateway 允许域: ${OPENCLAW_GATEWAY_ALLOWED_ORIGINS:-未设置}"
+echo "Gateway 允许不安全认证: ${OPENCLAW_GATEWAY_ALLOW_INSECURE_AUTH:-true}"
+echo "Gateway 禁用设备认证: ${OPENCLAW_GATEWAY_DANGEROUSLY_DISABLE_DEVICE_AUTH:-false}"
+echo "插件启用: ${OPENCLAW_PLUGINS_ENABLED:-true}"
+echo "允许插件列表已由系统自动同步"
 
 # 安装 bun
 export BUN_INSTALL="/usr/local"
