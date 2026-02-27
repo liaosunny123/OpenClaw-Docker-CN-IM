@@ -113,27 +113,70 @@ def sync():
             feishu_raw['accounts'] = {'main': {'appId': old_app_id, 'appSecret': old_app_secret, 'botName': old_bot_name}}
 
         # --- 1. 模型同步 ---
-        if env.get('API_KEY') and env.get('BASE_URL'):
-            p = ensure_path(config, ['models', 'providers', 'default'])
-            p['baseUrl'] = env['BASE_URL']
-            p['apiKey'] = env['API_KEY']
-            p['api'] = env.get('API_PROTOCOL') or 'openai-completions'
+        if env.get('SYNC_MODEL_CONFIG', 'true').lower() == 'true':
+            def sync_provider(p_name, api_key, base_url, protocol, m_ids_str, context_window, max_tokens):
+                if not (api_key and base_url or m_ids_str): return None
+                p = ensure_path(config, ['models', 'providers', p_name])
+                if api_key: p['apiKey'] = api_key
+                if base_url: p['baseUrl'] = base_url
+                p['api'] = protocol or 'openai-completions'
+                
+                mlist = p.get('models', [])
+                m_ids = [x.strip() for x in m_ids_str.split(',') if x.strip()]
+                
+                for m_id in m_ids:
+                    # 如果 m_id 包含 /，提取模型名部分
+                    actual_m_id = m_id.split('/')[-1] if '/' in m_id else m_id
+                    
+                    m_obj = next((m for m in mlist if m.get('id') == actual_m_id), None)
+                    if not m_obj:
+                        m_obj = {'id': actual_m_id, 'name': actual_m_id, 'reasoning': False, 'input': ['text', 'image'], 
+                                 'cost': {'input': 0, 'output': 0, 'cacheRead': 0, 'cacheWrite': 0}}
+                        mlist.append(m_obj)
+                    m_obj['contextWindow'] = int(context_window or 200000)
+                    m_obj['maxTokens'] = int(max_tokens or 8192)
+                
+                p['models'] = mlist
+                return p_name
+
+            # Provider 1 (default)
+            p1_active = sync_provider(
+                'default', 
+                env.get('API_KEY'), 
+                env.get('BASE_URL'), 
+                env.get('API_PROTOCOL'), 
+                env.get('MODEL_ID') or 'gpt-4o',
+                env.get('CONTEXT_WINDOW'),
+                env.get('MAX_TOKENS')
+            )
             
-            mid = env.get('MODEL_ID') or 'gpt-4o'
-            mlist = p.get('models', [])
-            m_obj = next((m for m in mlist if m.get('id') == mid), None)
-            if not m_obj:
-                m_obj = {'id': mid, 'name': mid, 'reasoning': False, 'input': ['text', 'image'], 
-                         'cost': {'input': 0, 'output': 0, 'cacheRead': 0, 'cacheWrite': 0}}
-                mlist.append(m_obj)
-            
-            m_obj['contextWindow'] = int(env.get('CONTEXT_WINDOW') or 200000)
-            m_obj['maxTokens'] = int(env.get('MAX_TOKENS') or 8192)
-            p['models'] = mlist
-            
+            # Provider 2
+            p2_name = env.get('MODEL2_NAME') or 'model2'
+            p2_active = sync_provider(
+                p2_name,
+                env.get('MODEL2_API_KEY'),
+                env.get('MODEL2_BASE_URL'),
+                env.get('MODEL2_PROTOCOL'),
+                env.get('MODEL2_MODEL_ID') or '',
+                env.get('MODEL2_CONTEXT_WINDOW'),
+                env.get('MODEL2_MAX_TOKENS')
+            )
+
             # 同步更新默认模型
-            ensure_path(config, ['agents', 'defaults', 'model'])['primary'] = f'default/{mid}'
-            ensure_path(config, ['agents', 'defaults', 'imageModel'])['primary'] = f'default/{mid}'
+            mid_raw = env.get('MODEL_ID') or 'gpt-4o'
+            # 获取第一个模型 ID 作为默认 primary
+            mid = [x.strip() for x in mid_raw.split(',') if x.strip()][0]
+            
+            imid_raw = env.get('IMAGE_MODEL_ID') or mid
+            imid = [x.strip() for x in imid_raw.split(',') if x.strip()][0]
+            
+            def get_full_mid(m_id, default_p='default'):
+                if '/' in m_id: return m_id
+                return f'{default_p}/{m_id}'
+
+            if p1_active:
+                ensure_path(config, ['agents', 'defaults', 'model'])['primary'] = get_full_mid(mid)
+                ensure_path(config, ['agents', 'defaults', 'imageModel'])['primary'] = get_full_mid(imid)
             
             # 工作区同步：存在则更新，不存在则恢复默认
             config['agents']['defaults']['workspace'] = env.get('WORKSPACE') or '/home/node/.openclaw/workspace'
@@ -141,11 +184,14 @@ def sync():
             # 同步更新 memory 路径
             if 'memory' in config and 'qmd' in config['memory']:
                 config['memory']['qmd']['command'] = '/usr/local/bin/qmd'
-                for p in config['memory']['qmd'].get('paths', []):
-                    if p.get('name') == 'workspace':
-                        p['path'] = config['agents']['defaults']['workspace']
+                for p_item in config['memory']['qmd'].get('paths', []):
+                    if p_item.get('name') == 'workspace':
+                        p_item['path'] = config['agents']['defaults']['workspace']
             
-            print(f'✅ 模型与工作区同步: {mid}')
+            msg = f'✅ 模型同步完成: 主模型={get_full_mid(mid)}'
+            if imid != mid: msg += f', 图片模型={get_full_mid(imid)}'
+            if p2_active: msg += f', 已启用备用提供商: {p2_name}'
+            print(msg)
 
         # --- 2. 渠道与插件同步 (声明式) ---
         channels = ensure_path(config, ['channels'])
@@ -258,7 +304,20 @@ if [ "$(id -u)" -eq 0 ]; then
 fi
 
 echo "=== 初始化完成 ==="
-echo "当前使用模型: default/$MODEL_ID"
+if [ "${SYNC_MODEL_CONFIG:-true}" = "false" ]; then
+    echo "模型配置: 手动模式 (跳过环境变量同步)"
+else
+    # 简单的 shell 逻辑来处理可能的 provider 前缀
+    FINAL_MID="${MODEL_ID:-gpt-4o}"
+    [[ "$FINAL_MID" != */* ]] && FINAL_MID="default/$FINAL_MID"
+    
+    FINAL_IMID="${IMAGE_MODEL_ID:-${MODEL_ID:-gpt-4o}}"
+    [[ "$FINAL_IMID" != */* ]] && FINAL_IMID="default/$FINAL_IMID"
+
+    echo "当前主模型: $FINAL_MID"
+    echo "当前图片模型: $FINAL_IMID"
+    [ -n "$MODEL2_API_KEY" ] && echo "备用提供商: ${MODEL2_NAME:-model2} (已启用)"
+fi
 echo "API 协议: ${API_PROTOCOL:-openai-completions}"
 echo "Base URL: ${BASE_URL}"
 echo "上下文窗口: ${CONTEXT_WINDOW:-200000}"
