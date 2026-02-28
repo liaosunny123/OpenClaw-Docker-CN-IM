@@ -368,9 +368,9 @@ EOF
     echo "✅ 已生成 auth.json"
     fi
 
-    # 生成 models.json（如果已存在则跳过）
-    if [ -f "$agent_dir/models.json" ]; then
-        echo "⏭️  models.json 已存在，跳过生成"
+    # 生成 models.json（如果已存在且包含 apiKey 则跳过，否则重新生成）
+    if [ -f "$agent_dir/models.json" ] && grep -q '"apiKey"' "$agent_dir/models.json"; then
+        echo "⏭️  models.json 已存在且配置完整，跳过生成"
     else
     cat > "$agent_dir/models.json" <<EOF
 {
@@ -426,10 +426,12 @@ def update_codex_config():
     # 设置 openai-codex 提供商
     config['models']['providers']['openai-codex'] = {
         'baseUrl': base_url,
+        'apiKey': 'unused',
         'models': [
             {
                 'id': model_id,
-                'name': model_name
+                'name': model_name,
+                'api': 'openai-codex-responses'
             }
         ]
     }
