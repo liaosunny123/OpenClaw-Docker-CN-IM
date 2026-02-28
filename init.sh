@@ -423,17 +423,11 @@ def update_codex_config():
         del config['models']['providers'][k]
         print(f'🧹 已清理无效提供商: {k}')
 
-    # 设置 openai-codex 提供商
-    config['models']['providers']['openai-codex'] = {
-        'baseUrl': base_url,
-        'apiKey': 'unused',
-        'models': [
-            {
-                'id': model_id,
-                'name': model_name
-            }
-        ]
-    }
+    # 从 openclaw.json 中移除 openai-codex 提供商（由 models.json 全权管理，
+    # 避免 gateway 启动时浅合并覆盖 models.json 中的完整模型定义）
+    if 'openai-codex' in config['models']['providers']:
+        del config['models']['providers']['openai-codex']
+        print('🧹 已从 openclaw.json 移除 openai-codex 提供商（由 models.json 管理）')
 
     # 设置默认模型
     if 'agents' not in config: config['agents'] = {}
