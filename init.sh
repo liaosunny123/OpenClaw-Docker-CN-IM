@@ -430,8 +430,7 @@ def update_codex_config():
         'models': [
             {
                 'id': model_id,
-                'name': model_name,
-                'api': 'openai-codex-responses'
+                'name': model_name
             }
         ]
     }
