@@ -323,7 +323,10 @@ setup_codex_oauth() {
     # 创建 agent 目录
     mkdir -p "$agent_dir"
 
-    # 生成 auth-profiles.json
+    # 生成 auth-profiles.json（如果已存在则跳过）
+    if [ -f "$agent_dir/auth-profiles.json" ]; then
+        echo "⏭️  auth-profiles.json 已存在，跳过生成"
+    else
     cat > "$agent_dir/auth-profiles.json" <<EOF
 {
   "version": 1,
@@ -345,8 +348,12 @@ setup_codex_oauth() {
 }
 EOF
     echo "✅ 已生成 auth-profiles.json"
+    fi
 
-    # 生成 auth.json
+    # 生成 auth.json（如果已存在则跳过）
+    if [ -f "$agent_dir/auth.json" ]; then
+        echo "⏭️  auth.json 已存在，跳过生成"
+    else
     cat > "$agent_dir/auth.json" <<EOF
 {
   "openai-codex": {
@@ -359,8 +366,12 @@ EOF
 }
 EOF
     echo "✅ 已生成 auth.json"
+    fi
 
-    # 生成 models.json
+    # 生成 models.json（如果已存在则跳过）
+    if [ -f "$agent_dir/models.json" ]; then
+        echo "⏭️  models.json 已存在，跳过生成"
+    else
     cat > "$agent_dir/models.json" <<EOF
 {
   "providers": {
@@ -384,6 +395,7 @@ EOF
 }
 EOF
     echo "✅ 已生成 models.json"
+    fi
 
     # 更新 openclaw.json 中的 Codex 提供商和默认模型配置
     python3 -c "
