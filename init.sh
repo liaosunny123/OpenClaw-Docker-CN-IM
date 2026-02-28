@@ -369,7 +369,7 @@ EOF
     fi
 
     # 生成 models.json（如果已存在且包含 apiKey 则跳过，否则重新生成）
-    if [ -f "$agent_dir/models.json" ] && grep -q '"apiKey"' "$agent_dir/models.json"; then
+    if [ -f "$agent_dir/models.json" ] && grep -q '"apiKey"' "$agent_dir/models.json" && grep -q '"api"' "$agent_dir/models.json"; then
         echo "⏭️  models.json 已存在且配置完整，跳过生成"
     else
     cat > "$agent_dir/models.json" <<EOF
