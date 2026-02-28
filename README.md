@@ -578,6 +578,44 @@ BASE_URL=http://localhost:3000/gemini-antigravity/v1
 
 ---
 
+## Codex OAuth Compatible 接入配置
+
+<details>
+<summary><b>点击展开 Codex OAuth Compatible 配置说明</b></summary>
+
+本项目支持通过 Codex OAuth Compatible 方式接入，适用于需要使用 OpenAI Codex 兼容协议的场景。
+
+只需在 `.env` 文件中配置 Token 和 API 地址，容器启动时会自动生成所有认证文件和模型配置：
+
+```bash
+# Codex OAuth Compatible 接入
+CODEX_OAUTH_TOKEN=你的JWT兼容Token
+CODEX_BASE_URL=你的Codex API地址
+```
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `CODEX_OAUTH_TOKEN` | JWT 兼容 Token（必需，同时用于 access 和 refresh） | 无 |
+| `CODEX_BASE_URL` | Codex API 地址（必需） | 无 |
+| `CODEX_MODEL_ID` | Codex 模型 ID（可选） | `gpt-5.3-codex` |
+| `CODEX_MODEL_NAME` | Codex 模型显示名称（可选） | `GPT-5.3 Codex` |
+
+> ⚠️ 此配置与上方提供商配置（`MODEL_ID`/`BASE_URL`/`API_KEY`）二选一，启用 Codex OAuth 后会覆盖默认模型设置。
+
+配置后启动容器即可：
+
+```bash
+docker-compose up -d
+```
+
+容器启动时会自动完成以下操作：
+1. 在 `~/.openclaw/agents/main/agent/` 目录下生成 OAuth 认证文件（`auth-profiles.json`、`auth.json`、`models.json`）
+2. 更新 `~/.openclaw/openclaw.json` 中的提供商和默认模型配置
+
+</details>
+
+---
+
 ## 高级使用
 
 <details>

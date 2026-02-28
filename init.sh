@@ -113,7 +113,9 @@ def sync():
             feishu_raw['accounts'] = {'main': {'appId': old_app_id, 'appSecret': old_app_secret, 'botName': old_bot_name}}
 
         # --- 1. 模型同步 ---
-        if env.get('SYNC_MODEL_CONFIG', 'true').lower() == 'true':
+        # 如果启用了 Codex OAuth，跳过默认模型同步（由 setup_codex_oauth 接管）
+        codex_oauth_enabled = bool(env.get('CODEX_OAUTH_TOKEN'))
+        if env.get('SYNC_MODEL_CONFIG', 'true').lower() == 'true' and not codex_oauth_enabled:
             def sync_provider(p_name, api_key, base_url, protocol, m_ids_str, context_window, max_tokens):
                 if not (api_key and base_url or m_ids_str): return None
                 p = ensure_path(config, ['models', 'providers', p_name])
@@ -298,6 +300,137 @@ sync()
 
 sync_config_with_env
 
+# Codex OAuth Compatible 接入
+setup_codex_oauth() {
+    local token="${CODEX_OAUTH_TOKEN}"
+    local base_url="${CODEX_BASE_URL}"
+    local model_id="${CODEX_MODEL_ID:-gpt-5.3-codex}"
+    local model_name="${CODEX_MODEL_NAME:-GPT-5.3 Codex}"
+    local agent_dir="/home/node/.openclaw/agents/main/agent"
+    local config_file="/home/node/.openclaw/openclaw.json"
+
+    if [ -z "$token" ]; then
+        return 0
+    fi
+
+    if [ -z "$base_url" ]; then
+        echo "❌ CODEX_OAUTH_TOKEN 已设置但 CODEX_BASE_URL 为空，请配置 Codex API 地址"
+        exit 1
+    fi
+
+    echo "=== 配置 Codex OAuth Compatible 接入 ==="
+
+    # 创建 agent 目录
+    mkdir -p "$agent_dir"
+
+    # 生成 auth-profiles.json
+    cat > "$agent_dir/auth-profiles.json" <<EOF
+{
+  "version": 1,
+  "profiles": {
+    "openai-codex:default": {
+      "type": "oauth",
+      "provider": "openai-codex",
+      "access": "$token",
+      "refresh": "$token",
+      "expires": 4102444800000,
+      "email": "default",
+      "accountId": "default"
+    }
+  },
+  "lastGood": {
+    "openai-codex": "openai-codex:default"
+  },
+  "usageStats": {}
+}
+EOF
+    echo "✅ 已生成 auth-profiles.json"
+
+    # 生成 auth.json
+    cat > "$agent_dir/auth.json" <<EOF
+{
+  "openai-codex": {
+    "type": "oauth",
+    "access": "$token",
+    "refresh": "$token",
+    "expires": 4102444800000,
+    "accountId": "default"
+  }
+}
+EOF
+    echo "✅ 已生成 auth.json"
+
+    # 生成 models.json
+    cat > "$agent_dir/models.json" <<EOF
+{
+  "providers": {
+    "openai-codex": {
+      "baseUrl": "$base_url"
+    }
+  }
+}
+EOF
+    echo "✅ 已生成 models.json"
+
+    # 更新 openclaw.json 中的 Codex 提供商和默认模型配置
+    python3 -c "
+import json, sys
+
+def update_codex_config():
+    path = '$config_file'
+    base_url = '$base_url'
+    model_id = '$model_id'
+    model_name = '$model_name'
+
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+    except:
+        config = {}
+
+    # 确保路径存在
+    if 'models' not in config: config['models'] = {}
+    if 'providers' not in config['models']: config['models']['providers'] = {}
+
+    # 清理没有 baseUrl 的无效提供商（如空的 default）
+    invalid = [k for k, v in config['models']['providers'].items() if isinstance(v, dict) and not v.get('baseUrl')]
+    for k in invalid:
+        del config['models']['providers'][k]
+        print(f'🧹 已清理无效提供商: {k}')
+
+    # 设置 openai-codex 提供商
+    config['models']['providers']['openai-codex'] = {
+        'baseUrl': base_url,
+        'models': [
+            {
+                'id': model_id,
+                'name': model_name
+            }
+        ]
+    }
+
+    # 设置默认模型
+    if 'agents' not in config: config['agents'] = {}
+    if 'defaults' not in config['agents']: config['agents']['defaults'] = {}
+    config['agents']['defaults']['model'] = {'primary': f'openai-codex/{model_id}'}
+    config['agents']['defaults']['models'] = {f'openai-codex/{model_id}': {}}
+    # 清理指向无效提供商的 imageModel
+    if 'imageModel' in config['agents']['defaults']:
+        del config['agents']['defaults']['imageModel']
+
+    with open(path, 'w', encoding='utf-8') as f:
+        json.dump(config, f, indent=2, ensure_ascii=False)
+
+    print(f'✅ openclaw.json 已更新: 默认模型设置为 openai-codex/{model_id}')
+
+update_codex_config()
+"
+
+    echo "=== Codex OAuth 配置完成 ==="
+}
+
+setup_codex_oauth
+
 # 确保所有文件和目录的权限正确（仅 root 可执行）
 if [ "$(id -u)" -eq 0 ]; then
     chown -R node:node "$OPENCLAW_HOME" || true
@@ -330,6 +463,11 @@ echo "Gateway 允许不安全认证: ${OPENCLAW_GATEWAY_ALLOW_INSECURE_AUTH:-tru
 echo "Gateway 禁用设备认证: ${OPENCLAW_GATEWAY_DANGEROUSLY_DISABLE_DEVICE_AUTH:-false}"
 echo "插件启用: ${OPENCLAW_PLUGINS_ENABLED:-true}"
 echo "允许插件列表已由系统自动同步"
+if [ -n "$CODEX_OAUTH_TOKEN" ]; then
+    echo "Codex OAuth: 已启用"
+    echo "Codex Base URL: ${CODEX_BASE_URL}"
+    echo "Codex 模型: openai-codex/${CODEX_MODEL_ID:-gpt-5.3-codex}"
+fi
 
 # 安装 bun
 export BUN_INSTALL="/usr/local"
