@@ -365,7 +365,20 @@ EOF
 {
   "providers": {
     "openai-codex": {
-      "baseUrl": "$base_url"
+      "baseUrl": "$base_url",
+      "apiKey": "unused",
+      "models": [
+        {
+          "id": "$model_id",
+          "name": "$model_name",
+          "api": "openai-codex-responses",
+          "reasoning": false,
+          "input": ["text"],
+          "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+          "contextWindow": 200000,
+          "maxTokens": 8192
+        }
+      ]
     }
   }
 }
